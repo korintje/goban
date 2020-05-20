@@ -55,7 +55,7 @@ impl Game {
     /// Crates a new game for playing Go
     pub fn new(size: GobanSizes, rule: Rule) -> Self {
         let (width, height) = size.into();
-        let goban = Goban::new(size.into());
+        let goban = Goban::new();
         let komi = rule.komi();
         let pass = 0;
         #[cfg(feature = "history")]

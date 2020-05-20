@@ -15,7 +15,7 @@ mod tests {
 
     #[test]
     fn goban() {
-        let mut g = Goban::new(GobanSizes::Nineteen.into());
+        let mut g = Goban::new();
         g.push((1, 2), Color::White);
         println!("{}", g.pretty_string());
         assert!(true)
@@ -23,11 +23,11 @@ mod tests {
 
     #[test]
     fn goban_new_array() {
-        let mut g = Goban::new(GobanSizes::Nineteen.into());
+        let mut g = Goban::new();
         g.push((1, 2), Color::White);
         g.push((1, 3), Color::Black);
         let tab = g.raw();
-        let g2 = Goban::from_array(&tab, Order::RowMajor);
+        let g2 = Goban::from_array(&tab, Order::ColumnMajor);
         assert_eq!(g, g2)
     }
 
@@ -43,7 +43,7 @@ mod tests {
 
     #[test]
     fn get_all_stones() {
-        let mut g = Goban::new(GobanSizes::Nineteen.into());
+        let mut g = Goban::new();
         g.push((1, 2), Color::White);
         g.push((0, 0), Color::Black);
 
@@ -434,7 +434,7 @@ mod tests {
 
     #[test]
     fn atari() {
-        let mut goban = Goban::new((9, 9));
+        let mut goban = Goban::new();
         let s = Stone {
             coordinates: (4, 4),
             color: Color::Black,
@@ -486,7 +486,7 @@ mod tests {
         g.play(Move::Pass);
         g.play(Move::Pass);
         let score = g.calculate_score();
-        assert_eq!(score.0, 80.); //Black
+        assert_eq!(score.0, 360.); //Black
         assert_eq!(score.1, Rule::Japanese.komi()); //White
     }
 
@@ -550,11 +550,11 @@ mod tests {
         }
         .expect("Game finished");
         let (black, white) = g.calculate_score();
-        assert_eq!(black, 81.);
+        assert_eq!(black, 361.);
         assert_eq!(white, g.komi());
         assert_eq!(
             outcome,
-            EndGame::WinnerByScore(Player::Black, 81. - g.komi())
+            EndGame::WinnerByScore(Player::Black, 361. - g.komi())
         )
     }
 

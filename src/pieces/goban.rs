@@ -17,13 +17,10 @@ use std::hash::{Hash, Hasher};
 #[derive(Getters, Setters, CopyGetters, Debug, Clone)]
 pub struct Goban {
     #[get = "pub"]
-    pub(super) go_strings: Vec<Option<GoStringPtr>>,
+    pub(super) go_strings: [[Option<GoStringPtr>; 19]; 19],
 
-    #[get_copy = "pub"]
-    size: (Nat, Nat),
-
-    #[get]
-    coord_util: CoordUtil,
+    #[get_copy= "pub"]
+    size : (Nat,Nat),
 
     #[get_copy = "pub"]
     zobrist_hash: u64,
@@ -34,19 +31,18 @@ impl Goban {
     /// # Arguments
     ///
     /// * `(height, width)` a tuple with the height and the width of the desired goban.
-    pub fn new((height, width): (Nat, Nat)) -> Self {
+    pub fn new() -> Self {
         Goban {
-            size: (height, width),
-            coord_util: CoordUtil::new(height, width),
+            size: (19, 19),
             zobrist_hash: 0,
-            go_strings: vec![Option::None; height as usize * width as usize],
+            go_strings: Default::default(),
         }
     }
 
     /// Creates a Goban from an array of stones.
     pub fn from_array(stones: &[Color], order: Order) -> Self {
         let size = ((stones.len() as f32).sqrt()) as Nat;
-        let mut g = Goban::new((size, size));
+        let mut g = Goban::new();
         let coord_util = CoordUtil::new_order(size, size, order);
         stones
             .iter()
@@ -61,14 +57,15 @@ impl Goban {
 
     /// Returns the underlying goban in a vector with a RowMajor Policy
     pub fn raw(&self) -> Vec<Color> {
-        self.go_strings
-            .iter()
-            .map(|point| {
-                point
-                    .as_ref()
-                    .map_or(Color::None, |go_str_ptr| go_str_ptr.color)
-            })
-            .collect()
+        let mut res = Vec::with_capacity(19 * 19);
+        for i in 0..19 {
+            for j in 0..19 {
+                if let Some(go_str_ptr) = &self.go_strings[i][j] {
+                    res.push(go_str_ptr.color)
+                }
+            }
+        }
+        res
     }
 
     /// Get number of stones on the goban.
@@ -91,21 +88,19 @@ impl Goban {
     pub fn push(&mut self, point: Point, color: Color) -> &mut Self {
         assert_ne!(color, Color::None, "We can't push Empty stones");
         assert!(
-            point.0 < self.size.0,
-            "Coordinate point.0 {} out of bounds",
-            point.0
+            point.0 < 19,
+            "Coordinate point.0: {} out of bounds",
         );
         assert!(
-            point.1 < self.size.1,
-            "Coordinate point.1 {} out of bounds",
-            point.1
+            point.1 < 19,
+            "Coordinate point.1: {} out of bounds",
         );
 
         let mut liberties = Set::with_capacity(4);
         let mut adjacent_same_color_str_set = Set::with_capacity(4);
         let mut adjacent_opposite_color_str_set = Set::with_capacity(4);
         for p in self.neighbor_points(point) {
-            match &self.go_strings[self.coord_util.to(p)] {
+            match &self.go_strings[p.0 as usize][p.1 as usize] {
                 Some(adj_go_str_ptr) => match adj_go_str_ptr.color {
                     go_str_color if go_str_color == color => {
                         adjacent_same_color_str_set.insert(adj_go_str_ptr.to_owned());
@@ -165,7 +160,7 @@ impl Goban {
 
     /// Get all the neighbors to the coordinate including empty intersections.
     #[inline]
-    pub fn get_neighbors(&self, coord: Point) -> impl Iterator<Item = Stone> + '_ {
+    pub fn get_neighbors(&self, coord: Point) -> impl Iterator<Item=Stone> + '_ {
         self.neighbor_points(coord).map(move |point| Stone {
             coordinates: point,
             color: self.get_stone(point),
@@ -174,41 +169,42 @@ impl Goban {
 
     /// Get all the stones that are neighbor to the coord except empty intersections.
     #[inline]
-    pub fn get_neighbors_stones(&self, coord: Point) -> impl Iterator<Item = Stone> + '_ {
+    pub fn get_neighbors_stones(&self, coord: Point) -> impl Iterator<Item=Stone> + '_ {
         self.get_neighbors(coord).filter(|s| s.color != Color::None)
     }
 
     /// Get all the neighbors go strings to the point. Only return point with a color.
     #[inline]
-    pub fn get_neighbors_strings(&self, coord: Point) -> impl Iterator<Item = GoStringPtr> + '_ {
+    pub fn get_neighbors_strings(&self, coord: Point) -> impl Iterator<Item=GoStringPtr> + '_ {
         self.neighbor_points(coord)
-            .filter_map(move |point| self.go_strings[self.coord_util.to(point)].clone())
+            .filter_map(move |point| self.go_strings[point.0 as usize][point.1 as usize].clone())
     }
 
     /// Function for getting the stone in the goban.
     #[inline]
-    pub fn get_stone(&self, point: Point) -> Color {
-        self.go_strings[self.coord_util.to(point)]
+    pub fn get_stone(&self, (x, y): Point) -> Color {
+        self.go_strings[x as usize][y as usize]
             .as_ref()
             .map_or(Color::None, |go_str_ptr| go_str_ptr.color)
     }
 
     /// Get all the stones except "Empty stones"
     #[inline]
-    pub fn get_stones(&self) -> impl Iterator<Item = Stone> + '_ {
-        self.go_strings
-            .iter()
-            .enumerate()
-            .filter_map(move |(index, o)| match o {
-                Some(x) => Some((self.coord_util.from(index), x.color)),
-                Option::None => Option::None,
-            })
-            .map(|(coordinates, color)| Stone { coordinates, color })
+    pub fn get_stones(&self) -> impl Iterator<Item=Stone> + '_ {
+        let mut res = Vec::with_capacity(19 * 19);
+        for i in 0..19 {
+            for j in 0..19 {
+                if let Some(go_str_ptr) = &self.go_strings[i][j] {
+                    res.push(Stone { coordinates: (i as u8, j as u8), color: go_str_ptr.color })
+                }
+            }
+        }
+        res.into_iter()
     }
 
     /// Get stones by their color.
     #[inline]
-    pub fn get_stones_by_color(&self, color: Color) -> impl Iterator<Item = Stone> + '_ {
+    pub fn get_stones_by_color(&self, color: Color) -> impl Iterator<Item=Stone> + '_ {
         self.get_points_by_color(color).map(move |c| Stone {
             color,
             coordinates: c,
@@ -217,20 +213,27 @@ impl Goban {
 
     /// Get points by their color.
     #[inline]
-    pub fn get_points_by_color(&self, color: Color) -> impl Iterator<Item = Point> + '_ {
-        self.go_strings
-            .iter()
-            .enumerate()
-            .filter(move |(_, point)| match point {
-                Some(go_str_ptr) => go_str_ptr.color == color,
-                Option::None => color == Color::None,
-            })
-            .map(move |(index, _)| self.coord_util.from(index))
+    pub fn get_points_by_color(&self, color: Color) -> impl Iterator<Item=Point> + '_ {
+        let mut res = Vec::with_capacity(19 * 19);
+        for i in 0..19 {
+            for j in 0..19 {
+                if let Some(go_str_ptr) = &self.go_strings[i][j] {
+                    if go_str_ptr.color == color {
+                        res.push((i as u8, j as u8));
+                    }
+                } else {
+                    if color == Color::None {
+                        res.push((i as u8, j as u8));
+                    }
+                }
+            }
+        }
+        res.into_iter()
     }
 
     /// Returns the empty stones connected to the stone
     #[inline]
-    pub fn get_liberties(&self, point: Point) -> impl Iterator<Item = Stone> + '_ {
+    pub fn get_liberties(&self, point: Point) -> impl Iterator<Item=Stone> + '_ {
         self.get_neighbors(point).filter(|s| s.color == Color::None)
     }
 
@@ -283,7 +286,7 @@ impl Goban {
             self.zobrist_hash ^= ZOBRIST[(point, color_of_the_string)];
 
             // Remove each point from the map. The Rc will be dropped "normally".
-            self.go_strings[self.coord_util.to(point)] = Option::None;
+            self.go_strings[point.0 as usize][point.1 as usize] = Option::None;
         }
 
         debug_assert!(
@@ -323,7 +326,7 @@ impl Goban {
     /// Deletes all the Rc from the go_strings, then merges the two_string
     fn merge_two_strings(&mut self, first: GoString, other: GoStringPtr) -> GoString {
         for &point in other.stones() {
-            unsafe { *self.go_strings.get_unchecked_mut(self.coord_util.to(point)) = Option::None };
+            self.go_strings[point.0 as usize][point.1 as usize] = Option::None;
         }
 
         first.merge_with((**other).clone())
@@ -331,17 +334,14 @@ impl Goban {
 
     /// Updates the indexes to math actual goban. must use after an we put a stone
     fn update_vec_indexes(&mut self, go_string: GoStringPtr) {
-        for &stone in go_string.stones() {
-            unsafe {
-                *self.go_strings.get_unchecked_mut(self.coord_util.to(stone)) =
-                    Some(go_string.clone());
-            }
+        for &(x, y) in go_string.stones() {
+            self.go_strings[x as usize][y as usize] = Some(go_string.clone());
         }
     }
 
     /// Get the neighbors points filtered by limits of the board.
     #[inline]
-    fn neighbor_points(&self, point: Point) -> impl Iterator<Item = Point> {
+    fn neighbor_points(&self, point: Point) -> impl Iterator<Item=Point> {
         let size = self.size;
         neighbor_points(point)
             .into_iter()
@@ -371,6 +371,6 @@ impl Eq for Goban {}
 
 impl Default for Goban {
     fn default() -> Self {
-        Goban::new((19, 19))
+        Goban::new()
     }
 }
